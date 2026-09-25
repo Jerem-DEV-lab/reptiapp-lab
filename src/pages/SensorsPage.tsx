@@ -1,10 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ErrorAlert, Page, PageHeader } from '@/components/page-header'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { api, type DeviceRow, type ReadingRow, type TerrariumRow } from '../api'
 import { useSession } from '../session'
 
 type Mode = 'constant' | 'sine' | 'walk'
 
 type Targets = { hot: number; cold: number; humidity: number }
+
+const modes: { value: Mode; label: string }[] = [
+  { value: 'constant', label: 'Constante' },
+  { value: 'sine', label: 'Oscillation autour des consignes' },
+  { value: 'walk', label: 'Marche aléatoire' },
+]
 
 function targetsFor(terrarium: TerrariumRow | undefined, now = new Date()): Targets {
   const schedule = terrarium?.habitatSchedule
@@ -47,19 +67,32 @@ export function SensorsPage() {
   const [error, setError] = useState<string | null>(null)
   const [backfillHours, setBackfillHours] = useState(24)
   const [pending, setPending] = useState(false)
+  const [loading, setLoading] = useState(true)
   const walk = useRef({ temperature: 30, humidity: 60 })
   const step = useRef(0)
 
   useEffect(() => {
     if (!token) return
+    let cancelled = false
     void Promise.all([
       api<{ data: TerrariumRow[] }>('/terrariums', { token }),
       api<{ data: DeviceRow[] }>('/iot-devices', { token }),
-    ]).then(([terrariumRes, deviceRes]) => {
-      setTerrariums(terrariumRes.data)
-      setDevices(deviceRes.data)
-      setTerrariumId((current) => current ?? terrariumRes.data[0]?.id ?? null)
-    })
+    ])
+      .then(([terrariumRes, deviceRes]) => {
+        if (cancelled) return
+        setTerrariums(terrariumRes.data)
+        setDevices(deviceRes.data)
+        setTerrariumId((current) => current ?? terrariumRes.data[0]?.id ?? null)
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Lecture impossible')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
   const device = useMemo(
@@ -167,115 +200,177 @@ export function SensorsPage() {
   }
 
   return (
-    <main className="page stack">
-      <div>
-        <h1>Capteurs</h1>
-        <p className="muted">
-          Consignes {targets.hot}°C / {targets.cold}°C · {targets.humidity}% HR
-        </p>
+    <Page>
+      <PageHeader
+        title="Capteurs"
+        description={`Consignes ${targets.hot} °C / ${targets.cold} °C · ${targets.humidity} % HR`}
+        actions={
+          running ? <Badge>Simulation en cours</Badge> : <Badge variant="outline">À l’arrêt</Badge>
+        }
+      />
+      <ErrorAlert message={error} />
+      {!loading && terrariums.length === 0 ? (
+        <Alert>
+          <AlertTitle>Aucun terrarium</AlertTitle>
+          <AlertDescription>Générez un jeu de données avant de simuler des mesures.</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Habitat</CardTitle>
+            <CardDescription>Le boîtier utilisé doit être apparié à ce terrarium.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="sensor-terrarium">Terrarium</Label>
+              <Select
+                value={terrariumId ? String(terrariumId) : undefined}
+                onValueChange={(value) => {
+                  setRunning(false)
+                  setTerrariumId(Number(value))
+                }}
+                disabled={terrariums.length === 0}
+              >
+                <SelectTrigger id="sensor-terrarium" className="w-full">
+                  <SelectValue placeholder={loading ? 'Chargement…' : 'Choisir un terrarium'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {terrariums.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-muted-foreground">Dernière température</dt>
+                <dd className="text-lg font-semibold tabular-nums">
+                  {latest ? `${latest.temperatureC} °C` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Dernière humidité</dt>
+                <dd className="text-lg font-semibold tabular-nums">
+                  {latest ? `${latest.humidityPercent} %` : '—'}
+                </dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-muted-foreground">Source</dt>
+                <dd>{latest ? latest.source : device ? 'Aucune mesure' : 'Aucun boîtier apparié'}</dd>
+              </div>
+            </dl>
+            {!loading && !device ? (
+              <Alert>
+                <AlertTitle>Aucun boîtier apparié</AlertTitle>
+                <AlertDescription>
+                  La simulation et l’historique nécessitent un boîtier au statut apparié sur ce terrarium.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Simulation</CardTitle>
+            <CardDescription>Fermer cet écran arrête l’envoi des mesures.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="sensor-mode">Mode</Label>
+              <Select value={mode} onValueChange={(value) => setMode(value as Mode)}>
+                <SelectTrigger id="sensor-mode" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {modes.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sensor-interval">Intervalle (s)</Label>
+              <Input
+                id="sensor-interval"
+                type="number"
+                min={2}
+                max={120}
+                value={intervalSeconds}
+                onChange={(event) => setIntervalSeconds(Number(event.target.value))}
+              />
+            </div>
+            {mode === 'constant' ? (
+              <>
+                <div className="grid gap-2">
+                  <Label htmlFor="sensor-temperature">Température</Label>
+                  <Input
+                    id="sensor-temperature"
+                    type="number"
+                    step="0.1"
+                    value={temperature}
+                    onChange={(event) => setTemperature(Number(event.target.value))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="sensor-humidity">Humidité</Label>
+                  <Input
+                    id="sensor-humidity"
+                    type="number"
+                    step="0.1"
+                    value={humidity}
+                    onChange={(event) => setHumidity(Number(event.target.value))}
+                  />
+                </div>
+              </>
+            ) : null}
+          </CardContent>
+          <CardFooter className="justify-between gap-3">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {running ? 'Simulation en cours.' : 'Simulation arrêtée.'}
+            </p>
+            <Button
+              type="button"
+              variant={running ? 'destructive' : 'default'}
+              disabled={!device}
+              onClick={() => {
+                walk.current = { temperature: targets.hot, humidity: targets.humidity }
+                step.current = 0
+                setError(null)
+                setRunning((value) => !value)
+              }}
+            >
+              {running ? 'Arrêter la simulation' : 'Démarrer la simulation'}
+            </Button>
+          </CardFooter>
+        </Card>
       </div>
-      <div className="card row">
-        <label>
-          Terrarium
-          <select
-            value={terrariumId ?? ''}
-            onChange={(event) => {
-              setRunning(false)
-              setTerrariumId(Number(event.target.value))
-            }}
-          >
-            {terrariums.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <div className="muted">Dernière mesure</div>
-          <strong>
-            {latest
-              ? `${latest.temperatureC}°C · ${latest.humidityPercent}% · ${latest.source}`
-              : device
-                ? 'Aucune'
-                : 'Aucun boîtier apparié'}
-          </strong>
-        </div>
-      </div>
-      <section className="card stack">
-        <div className="row">
-          <label>
-            Mode
-            <select value={mode} onChange={(event) => setMode(event.target.value as Mode)}>
-              <option value="constant">Constante</option>
-              <option value="sine">Oscillation autour des consignes</option>
-              <option value="walk">Marche aléatoire</option>
-            </select>
-          </label>
-          <label>
-            Intervalle (s)
-            <input
-              type="number"
-              min={2}
-              max={120}
-              value={intervalSeconds}
-              onChange={(event) => setIntervalSeconds(Number(event.target.value))}
-            />
-          </label>
-          {mode === 'constant' ? (
-            <>
-              <label>
-                Température
-                <input
-                  type="number"
-                  step="0.1"
-                  value={temperature}
-                  onChange={(event) => setTemperature(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Humidité
-                <input
-                  type="number"
-                  step="0.1"
-                  value={humidity}
-                  onChange={(event) => setHumidity(Number(event.target.value))}
-                />
-              </label>
-            </>
-          ) : null}
-        </div>
-        <div className="row">
-          <button
-            className="button"
-            type="button"
-            disabled={!device}
-            onClick={() => {
-              walk.current = { temperature: targets.hot, humidity: targets.humidity }
-              step.current = 0
-              setError(null)
-              setRunning((value) => !value)
-            }}
-          >
-            {running ? 'Arrêter la simulation' : 'Démarrer la simulation'}
-          </button>
-          <label>
-            Backfill (heures)
-            <input
-              type="number"
-              min={1}
-              max={72}
-              value={backfillHours}
-              onChange={(event) => setBackfillHours(Number(event.target.value))}
-            />
-          </label>
-          <button className="button-ghost" type="button" disabled={!device || pending} onClick={() => void backfill()}>
-            Injecter l’historique
-          </button>
-        </div>
-        {running ? <p className="ok">Simulation en cours. Fermer cet écran l’arrête.</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-    </main>
+      <Card>
+        <CardHeader>
+          <CardTitle>Historique</CardTitle>
+          <CardDescription>Injecte une série de mesures espacées de 15 minutes.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid max-w-xs gap-2">
+          <Label htmlFor="sensor-backfill">Backfill (heures)</Label>
+          <Input
+            id="sensor-backfill"
+            type="number"
+            min={1}
+            max={72}
+            value={backfillHours}
+            onChange={(event) => setBackfillHours(Number(event.target.value))}
+          />
+        </CardContent>
+        <CardFooter>
+          <Button type="button" variant="outline" disabled={!device || pending} onClick={() => void backfill()}>
+            {pending ? 'Injection…' : 'Injecter l’historique'}
+          </Button>
+        </CardFooter>
+      </Card>
+    </Page>
   )
 }

@@ -3,7 +3,8 @@ import { RequireActing, Shell } from './Shell'
 import { AccountsPage } from './pages/AccountsPage'
 import { LoginPage } from './pages/LoginPage'
 import { OverviewPage } from './pages/OverviewPage'
-import { SeedPage } from './pages/SeedPage'
+import { SeedLayout } from './pages/SeedLayout'
+import { EntityPage, SeedHubPage } from './pages/SeedPages'
 import { SensorsPage } from './pages/SensorsPage'
 
 export function App() {
@@ -14,7 +15,10 @@ export function App() {
         <Route path="/comptes" element={<AccountsPage />} />
         <Route element={<RequireActing />}>
           <Route path="/compte" element={<OverviewPage />} />
-          <Route path="/jeu" element={<SeedPage />} />
+          <Route path="/jeu" element={<SeedLayout />}>
+            <Route index element={<SeedHubPage />} />
+            <Route path=":entity" element={<EntityPage />} />
+          </Route>
           <Route path="/capteurs" element={<SensorsPage />} />
         </Route>
       </Route>

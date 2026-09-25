@@ -86,8 +86,22 @@ export type ScenarioResult = {
   labRunId: string
   reptileIds: number[]
   terrariumIds: number[]
-  reminderId: number
-  activityLogId: number
+  rackIds: number[]
+  equipmentIds: number[]
+  consumableIds: number[]
+  breedingEventIds: number[]
+  sheddingCycleIds: number[]
+  reminderIds: number[]
+  activityLogIds: number[]
+  reminderId: number | null
+  activityLogId: number | null
   iotDeviceId: number | null
   readingCount: number
 }
+
+export type NamedRow = { id: number; name: string }
+export type RackRow = NamedRow & { capacity?: number | null }
+export type EquipmentRow = NamedRow & { type: string }
+export type ConsumableRow = NamedRow & { type: string; quantity: number }
+export type BreedingRow = { id: number; status: string }
+export type SheddingRow = { id: number; status: string; reptileId: number }
