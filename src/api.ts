@@ -32,9 +32,12 @@ export async function api<T>(
   })
 
   const text = await response.text()
-  const payload = text ? (JSON.parse(text) as { message?: string }) : null
+  const payload = text
+    ? (JSON.parse(text) as { message?: string; errors?: { message?: string }[] })
+    : null
   if (!response.ok) {
-    throw new ApiError(response.status, payload?.message || `Erreur ${response.status}`)
+    const message = payload?.errors?.find((error) => error.message)?.message || payload?.message
+    throw new ApiError(response.status, message || `Erreur ${response.status}`)
   }
   return payload as T
 }

@@ -17,6 +17,7 @@ import { actingLabel, useSession } from './session'
 
 const pages: Record<string, string> = {
   '/comptes': 'Comptes',
+  '/contacts': 'Contacts',
   '/compte': 'Vue du compte',
   '/jeu': 'Jeu de données',
   '/capteurs': 'Capteurs',
@@ -29,7 +30,7 @@ export function Shell() {
 
   const seedEntity = location.pathname.startsWith('/jeu/') ? entityByPath(location.pathname.slice('/jeu/'.length)) : undefined
   const current = seedEntity?.title ?? pages[location.pathname] ?? 'Console'
-  const nested = location.pathname !== '/comptes'
+  const nested = location.pathname !== '/comptes' && location.pathname !== '/contacts'
 
   return (
     <SidebarProvider>
@@ -68,7 +69,7 @@ export function Shell() {
                 </>
               ) : (
                 <BreadcrumbItem>
-                  <BreadcrumbPage>Comptes</BreadcrumbPage>
+                  <BreadcrumbPage>{current}</BreadcrumbPage>
                 </BreadcrumbItem>
               )}
             </BreadcrumbList>

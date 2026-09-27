@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   ChevronsUpDownIcon,
+  ContactRoundIcon,
   DatabaseIcon,
   FlaskConicalIcon,
   LayoutDashboardIcon,
@@ -97,6 +98,18 @@ export function AppSidebar() {
                   <NavLink to="/comptes">
                     <UsersIcon />
                     <span>Comptes</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === '/contacts'}
+                  tooltip="Contacts"
+                >
+                  <NavLink to="/contacts">
+                    <ContactRoundIcon />
+                    <span>Contacts</span>
                   </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
